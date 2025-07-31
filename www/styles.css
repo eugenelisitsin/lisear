@@ -75,6 +75,37 @@ button:active {
     text-align: center;
 }
 
+/* Tempo control styles */
+.tempo-control {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 20px 0;
+    font-size: 1.1em;
+}
+
+.tempo-control input {
+    width: 60px;
+    padding: 5px 8px;
+    border: 2px solid white;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    text-align: center;
+    font-size: 1em;
+}
+
+.tempo-control input:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.tempo-control input:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.2);
+}
+
 .placeholders {
     display: flex;
     justify-content: center;
@@ -92,6 +123,7 @@ button:active {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: background-color 0.3s ease;
 }
 
 .chord-buttons {

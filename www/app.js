@@ -3,8 +3,14 @@ class LisearApp {
         this.audioContext = null;
         this.currentExercise = null;
         this.currentTonic = null;
-        this.tempo = 60; // BPM
-        this.beatDuration = 60 / this.tempo; // seconds per beat
+        this.selectedTempo = 30; // Default BPM
+        this.beatDuration = 60 / this.selectedTempo; // seconds per beat
+        
+        // Exercise state
+        this.exerciseActive = false;
+        this.currentProgression = [];
+        this.currentChordIndex = 0;
+        this.identifiedChords = [];
         
         // Note frequencies (C4 = 261.63 Hz)
         this.noteFrequencies = {
@@ -53,7 +59,15 @@ class LisearApp {
     startExercise(type) {
         this.currentExercise = type;
         this.currentTonic = this.getRandomTonic();
+        this.resetExerciseState();
         this.showExerciseScreen();
+    }
+    
+    resetExerciseState() {
+        this.exerciseActive = false;
+        this.currentProgression = [];
+        this.currentChordIndex = 0;
+        this.identifiedChords = ['_', '_', '_', '_'];
     }
     
     getRandomTonic() {
@@ -63,6 +77,7 @@ class LisearApp {
     showExerciseScreen() {
         const exerciseName = this.currentExercise === 'major' ? 'Major Scale' : 'Minor Scale';
         const chordButtons = this.getChordButtons();
+        const controlButtons = this.getControlButtons();
         
         const container = document.querySelector('.container');
         container.innerHTML = `
@@ -72,14 +87,18 @@ class LisearApp {
                     <h2>${exerciseName}</h2>
                     <p>Tonic: ${this.currentTonic}</p>
                 </div>
-                <button onclick="app.playStartSequence()">Start</button>
+                ${controlButtons}
+            </div>
+            
+            <div class="tempo-control">
+                <label for="tempo-input">Tempo:</label>
+                <input type="number" id="tempo-input" min="20" max="120" value="${this.selectedTempo}" 
+                       onchange="app.updateTempo(this.value)" ${this.exerciseActive ? 'disabled' : ''}>
+                <span>BPM</span>
             </div>
             
             <div class="placeholders">
-                <div class="placeholder">_</div>
-                <div class="placeholder">_</div>
-                <div class="placeholder">_</div>
-                <div class="placeholder">_</div>
+                ${this.getPlaceholders()}
             </div>
             
             <div class="chord-buttons">
@@ -88,30 +107,145 @@ class LisearApp {
         `;
     }
     
+    getControlButtons() {
+        if (!this.exerciseActive) {
+            return '<button onclick="app.startExerciseFlow()">Start</button>';
+        } else {
+            return `
+                <button onclick="app.nextTry()">Next try</button>
+                <button onclick="app.repeatProgression()">Repeat</button>
+            `;
+        }
+    }
+    
+    getPlaceholders() {
+        return this.identifiedChords.map((chord, index) => 
+            `<div class="placeholder" id="placeholder-${index}">${chord}</div>`
+        ).join('');
+    }
+    
     getChordButtons() {
         const chords = this.currentExercise === 'major' 
             ? ['I', 'ii', 'iii', 'IV', 'V', 'vi']
             : ['i', 'III', 'iv', 'V', 'VI', 'VII'];
             
         return chords.map(chord => 
-            `<button class="chord-button" onclick="app.playChord('${chord}')">${chord}</button>`
+            `<button class="chord-button" onclick="app.handleChordGuess('${chord}')">${chord}</button>`
         ).join('');
     }
     
-    playStartSequence() {
+    updateTempo(newTempo) {
+        this.selectedTempo = parseInt(newTempo);
+        this.beatDuration = 60 / this.selectedTempo;
+    }
+    
+    generateRandomProgression() {
+        const chords = this.currentExercise === 'major' 
+            ? ['I', 'ii', 'iii', 'IV', 'V', 'vi']
+            : ['i', 'III', 'iv', 'V', 'VI', 'VII'];
+            
+        this.currentProgression = [];
+        for (let i = 0; i < 4; i++) {
+            const randomChord = chords[Math.floor(Math.random() * chords.length)];
+            this.currentProgression.push(randomChord);
+        }
+    }
+    
+    startExerciseFlow() {
         if (!this.audioContext) {
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         
+        this.exerciseActive = true;
+        this.generateRandomProgression();
+        this.currentChordIndex = 0;
+        this.identifiedChords = ['_', '_', '_', '_'];
+        
+        // Update UI to show new buttons
+        this.showExerciseScreen();
+        
+        // Play cadence first, then progression
+        this.playSequence();
+    }
+    
+    playSequence() {
         const cadence = this.currentExercise === 'major' 
             ? ['I', 'IV', 'V', 'I']
             : ['i', 'iv', 'V', 'i'];
-            
+        
+        // Play cadence
         cadence.forEach((chord, index) => {
             setTimeout(() => {
                 this.playChord(chord);
             }, index * this.beatDuration * 1000);
         });
+        
+        // Play progression after cadence + 4-beat pause
+        const cadenceDelay = cadence.length * this.beatDuration * 1000;
+        const pauseDelay = 4 * this.beatDuration * 1000; // 4 beats pause
+        const totalDelay = cadenceDelay + pauseDelay;
+        
+        this.currentProgression.forEach((chord, index) => {
+            setTimeout(() => {
+                this.playChord(chord);
+            }, totalDelay + index * this.beatDuration * 1000);
+        });
+    }
+    
+    repeatProgression() {
+        this.playSequence();
+    }
+    
+    nextTry() {
+        this.currentTonic = this.getRandomTonic();
+        this.generateRandomProgression();
+        this.currentChordIndex = 0;
+        this.identifiedChords = ['_', '_', '_', '_'];
+        this.showExerciseScreen();
+        this.playSequence();
+    }
+    
+    handleChordGuess(guessedChord) {
+        if (!this.exerciseActive) {
+            // If exercise not active, just play the chord for reference
+            this.playChord(guessedChord);
+            return;
+        }
+        
+        const correctChord = this.currentProgression[this.currentChordIndex];
+        
+        if (guessedChord === correctChord) {
+            // Correct guess
+            this.identifiedChords[this.currentChordIndex] = guessedChord;
+            this.updatePlaceholder(this.currentChordIndex, guessedChord);
+            this.currentChordIndex++;
+            
+            // Check if exercise is complete
+            if (this.currentChordIndex >= 4) {
+                // All chords identified - wait for "Next try"
+                return;
+            }
+        } else {
+            // Incorrect guess - flash red
+            this.flashPlaceholder(this.currentChordIndex);
+        }
+    }
+    
+    updatePlaceholder(index, chord) {
+        const placeholder = document.getElementById(`placeholder-${index}`);
+        if (placeholder) {
+            placeholder.textContent = chord;
+        }
+    }
+    
+    flashPlaceholder(index) {
+        const placeholder = document.getElementById(`placeholder-${index}`);
+        if (placeholder) {
+            placeholder.style.backgroundColor = 'rgba(255, 0, 0, 0.7)';
+            setTimeout(() => {
+                placeholder.style.backgroundColor = '';
+            }, 500); // 0.5 seconds
+        }
     }
     
     playChord(chordSymbol) {

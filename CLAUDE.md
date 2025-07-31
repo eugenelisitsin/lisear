@@ -30,15 +30,29 @@ Home Screen
 
 Exercise Screen (1)
     Layout:
-        At the top of the screen: exercise name, Home button, Start button
+        At the top of the screen: 
+            exercise name, 
+            Home button, 
+            Start button
+            Text box "Tempo" and a number choice element allowing user to choose a tempo (number) between 20 and 120; the default value is 30
         Middle of the screen: a set of four empty placeholders (e.g., _ _ _ _) 
         Bottom of the screen: button with chord names depending of the chosen exercise:
             Major Scale: I ii iii IV V vi
             Minor Scale: i III iv V VI VII
     Behaviour:
         When the exercise screen is opened, the app randomly chooses the tonic
-        When the user presses "Start", the cadence corresponding to the exercise scale is played harmonically, with a chord on each beat
-        When the user presses the any of the buttons denoting chords, the corresponding chord is played harmonically
+        When the user presses "Start", the exercise begins
+            The start button is replaced with two buttons:
+                Next try
+                Repeat
+            First, the cadence corresponding to the exercise scale is played harmonically, in the chosen tempo
+            Then, after a pause of 4 beats, a random chord progression of four chords is played, in the chosen tempo
+            Then the user tries to identify chords of the progression by pressing the chord buttons
+            If the user presses correct chord button, then the corresponding placeholder is filled with chord sign (e.g. III or vi) and the user is allowed to continue identifying the next chord
+            If the users presses incorrect chord button, then the corresponding placeholder briefly (0.5 sec) flashed red and the user has to try again on the current chord of the progression
+            When all chords have been successfully identified, the app waits for the user to press Next try
+            Any time the user presses Repeat button, the sound stops and the cadence and the chord progression are played again
+            Any time the user presses next, current exercise is stopped, a new tonic is chosen, the cadence is played and the exercise starts over (the Start button does not return though) 
     
 
 Future functionality:
