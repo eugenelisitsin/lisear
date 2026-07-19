@@ -23,7 +23,7 @@ class LisearApp {
 
         // Mode state
         this.playMode = 'harmonic';
-        this.melodyDensity = 2;
+        this.melodyDensity = 4;
 
         // Voiced progressions
         this.voicedCadence = [];
@@ -53,7 +53,7 @@ class LisearApp {
                 const prefs = JSON.parse(saved);
                 this.selectedTempo = prefs.tempo || 30;
                 this.playMode = prefs.playMode || 'harmonic';
-                this.melodyDensity = prefs.melodyDensity || 2;
+                this.melodyDensity = 4; // Fixed at 4 notes per chord
                 this.volume = prefs.volume !== undefined ? prefs.volume : 0.8;
                 this.beatDuration = 60 / this.selectedTempo;
             }
@@ -275,15 +275,6 @@ class LisearApp {
                         onclick="app.setPlayMode('melodic')" ${this.exerciseActive ? 'disabled' : ''}>Melodic</button>
             </div>
 
-            ${this.playMode === 'melodic' ? `
-            <div class="density-control">
-                <span>Notes per chord:</span>
-                <button class="density-btn ${this.melodyDensity === 2 ? 'active' : ''}"
-                        onclick="app.setMelodyDensity(2)" ${this.exerciseActive ? 'disabled' : ''}>2</button>
-                <button class="density-btn ${this.melodyDensity === 4 ? 'active' : ''}"
-                        onclick="app.setMelodyDensity(4)" ${this.exerciseActive ? 'disabled' : ''}>4</button>
-            </div>
-            ` : ''}
 
             <div class="playback-state" id="playback-state">
                 ${this.getPlaybackStateText()}
@@ -697,25 +688,41 @@ class LisearApp {
         let lastNote = null;
 
         for (const chordSemitones of voicedProgression) {
+            // Get the 3 unique chord tones (root, third, fifth)
+            const [root, third, fifth] = chordSemitones;
+
+            // For each chord tone, find the best octave (closest to lastNote or center)
+            const pickBestOctave = (baseSemitone) => {
+                const options = [baseSemitone - 12, baseSemitone, baseSemitone + 12]
+                    .filter(n => n >= 48 && n <= 72);
+                if (options.length === 0) return baseSemitone;
+
+                if (lastNote === null) {
+                    // Pick closest to center (60 = middle C)
+                    return options.sort((a, b) => Math.abs(a - 60) - Math.abs(b - 60))[0];
+                }
+                // Pick closest to last note
+                return options.sort((a, b) => Math.abs(a - lastNote) - Math.abs(b - lastNote))[0];
+            };
+
+            // Build 4-note sequence ensuring all 3 chord tones appear
             const chordNotes = [];
 
-            const expandedTones = [];
-            for (const st of chordSemitones) {
-                expandedTones.push(st - 12, st, st + 12);
-            }
-            const playable = expandedTones.filter(n => n >= 48 && n <= 72);
+            // Pick first note (root, third, or fifth - randomized start)
+            const tones = [root, third, fifth];
+            const shuffled = [...tones].sort(() => Math.random() - 0.5);
 
-            for (let i = 0; i < this.melodyDensity; i++) {
-                if (lastNote === null) {
-                    const sorted = [...playable].sort((a, b) => Math.abs(a - 57) - Math.abs(b - 57));
-                    lastNote = sorted[0];
-                } else {
-                    const sorted = [...playable].sort((a, b) => Math.abs(a - lastNote) - Math.abs(b - lastNote));
-                    const candidates = sorted.slice(0, Math.min(3, sorted.length));
-                    lastNote = candidates[Math.floor(Math.random() * candidates.length)];
-                }
-                chordNotes.push(lastNote);
+            // Add all 3 chord tones with voice leading
+            for (const tone of shuffled) {
+                const note = pickBestOctave(tone);
+                chordNotes.push(note);
+                lastNote = note;
             }
+
+            // 4th note: repeat one chord tone (pick closest to last note for smooth motion)
+            const fourthNote = pickBestOctave(shuffled[Math.floor(Math.random() * 3)]);
+            chordNotes.push(fourthNote);
+            lastNote = fourthNote;
 
             melody.push(chordNotes);
         }
