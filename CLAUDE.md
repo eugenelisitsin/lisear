@@ -26,7 +26,6 @@ App Functionality
 
 Global Settings
     Default tempo: 30 BPM (configurable 20-120)
-    Cadence tempo: fixed 90 BPM
     Volume: adjustable via slider
     
 Audio Synthesis

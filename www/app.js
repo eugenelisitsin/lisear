@@ -768,15 +768,14 @@ class LisearApp {
 
         const now = this.audioContext.currentTime + 0.1;
         const beat = this.beatDuration;
-        const cadenceBeat = 60 / 90;
         const pauseDuration = 1.5;
 
-        // Play cadence
+        // Play cadence at same tempo as progression
         this.voicedCadence.forEach((semitones, index) => {
-            this.playChordFromSemitones(semitones, now + index * cadenceBeat, cadenceBeat * 0.9);
+            this.playChordFromSemitones(semitones, now + index * beat, beat * 0.9);
         });
 
-        const progressionStart = now + cadenceSymbols.length * cadenceBeat + pauseDuration;
+        const progressionStart = now + cadenceSymbols.length * beat + pauseDuration;
 
         if (this.playMode === 'harmonic') {
             this.voicedProgression.forEach((semitones, index) => {
@@ -808,7 +807,7 @@ class LisearApp {
         }
 
         // Calculate total playback time
-        const totalPlayTime = cadenceSymbols.length * cadenceBeat + pauseDuration + 4 * beat;
+        const totalPlayTime = cadenceSymbols.length * beat + pauseDuration + 4 * beat;
         const endDelay = totalPlayTime * 1000 + 100;
 
         setTimeout(() => {
