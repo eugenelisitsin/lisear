@@ -50,7 +50,7 @@ Exercise Screen (1)
             Then the user tries to identify chords of the progression by pressing the chord buttons
             If the user presses correct chord button, then the corresponding placeholder is filled with chord sign (e.g. III or vi) and the user is allowed to continue identifying the next chord
             If the users presses incorrect chord button, then the corresponding placeholder briefly (0.5 sec) flashed red and the user has to try again on the current chord of the progression
-            When all chords have been successfully identified, the app waits for the user to press Next try
+            When all chords have been successfully identified, the app automatically starts the next exercise after a 1-second delay
             Any time the user presses Repeat button, the sound stops and the cadence and the chord progression are played again
             Any time the user presses next, current exercise is stopped, a new tonic is chosen, the cadence is played and the exercise starts over (the Start button does not return though) 
     
