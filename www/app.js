@@ -705,22 +705,25 @@ class LisearApp {
                 return options.sort((a, b) => Math.abs(a - lastNote) - Math.abs(b - lastNote))[0];
             };
 
-            // Build 4-note sequence ensuring all 3 chord tones appear
+            // Build 4-note sequence: root first, then third & fifth, then repeat one
             const chordNotes = [];
 
-            // Pick first note (root, third, or fifth - randomized start)
-            const tones = [root, third, fifth];
-            const shuffled = [...tones].sort(() => Math.random() - 0.5);
+            // Note 1: always start with root
+            const rootNote = pickBestOctave(root);
+            chordNotes.push(rootNote);
+            lastNote = rootNote;
 
-            // Add all 3 chord tones with voice leading
-            for (const tone of shuffled) {
+            // Notes 2-3: third and fifth (shuffled order)
+            const remaining = Math.random() < 0.5 ? [third, fifth] : [fifth, third];
+            for (const tone of remaining) {
                 const note = pickBestOctave(tone);
                 chordNotes.push(note);
                 lastNote = note;
             }
 
-            // 4th note: repeat one chord tone (pick closest to last note for smooth motion)
-            const fourthNote = pickBestOctave(shuffled[Math.floor(Math.random() * 3)]);
+            // Note 4: repeat one chord tone (pick closest to last note)
+            const allTones = [root, third, fifth];
+            const fourthNote = pickBestOctave(allTones[Math.floor(Math.random() * 3)]);
             chordNotes.push(fourthNote);
             lastNote = fourthNote;
 
