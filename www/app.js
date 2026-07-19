@@ -777,6 +777,13 @@ class LisearApp {
 
         const progressionStart = now + cadenceSymbols.length * beat + pauseDuration;
 
+        // Enable answering when progression starts (not after it ends)
+        const answeringDelay = (progressionStart - this.audioContext.currentTime) * 1000;
+        setTimeout(() => {
+            this.updatePlaybackState('answering');
+            this.updateActivePlaceholder();
+        }, answeringDelay);
+
         if (this.playMode === 'harmonic') {
             this.voicedProgression.forEach((semitones, index) => {
                 const chordStartTime = progressionStart + index * beat;
@@ -805,16 +812,6 @@ class LisearApp {
                 });
             });
         }
-
-        // Calculate total playback time
-        const totalPlayTime = cadenceSymbols.length * beat + pauseDuration + 4 * beat;
-        const endDelay = totalPlayTime * 1000 + 100;
-
-        setTimeout(() => {
-            this.clearHighlights();
-            this.updatePlaybackState('answering');
-            this.updateActivePlaceholder();
-        }, endDelay);
     }
 
     repeatProgression() {
