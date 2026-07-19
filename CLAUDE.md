@@ -2,7 +2,12 @@ This is a Capacitor-based PWA (Progressive Web App) project called "Lisear" that
 
 The master files of the PWA itself are in www/ directory. Ignore everything else.
 
-The app should help user to train ear to recognize chords in a melody.
+The app helps users train their ear to recognize chords in a melody.
+
+Deployment
+    GitHub repo: https://github.com/eugenelisitsin/lisear
+    Live at: https://apps.lisitsin.com/lisear/
+    Auto-deploys on push to main (changes to www/ folder)
 
 Basic Definitions 
     An interval is the distance between two notes.
@@ -19,8 +24,20 @@ Basic Definitions
 
 App Functionality
 
-Global things
-    The tempo is 60 bpm
+Global Settings
+    Default tempo: 30 BPM (configurable 20-120)
+    Cadence tempo: fixed 90 BPM
+    Volume: adjustable via slider
+    
+Audio Synthesis
+    Enhanced Web Audio synthesis with:
+        Staggered note attacks (15-25ms offset) for chord clarity
+        Stereo panning based on pitch (low=left, high=right)
+        Attack noise burst for transient definition
+        Per-note detuning (±5 cents) and inharmonicity
+        Velocity scaling by pitch (bass louder, treble softer)
+        Improved reverb with stereo early reflections
+        Compressor to prevent clipping
 
 Home Screen
     List of exercises, each exercise is a button
@@ -28,33 +45,54 @@ Home Screen
     Pressing on the button opens the exercise screen
 
 
-Exercise Screen (1)
+Exercise Screen
     Layout:
-        At the top of the screen: 
-            exercise name, 
-            Home button, 
-            Start button
-            Text box "Tempo" and a number choice element allowing user to choose a tempo (number) between 20 and 120; the default value is 30
-        Middle of the screen: a set of four empty placeholders (e.g., _ _ _ _) 
-        Bottom of the screen: button with chord names depending of the chosen exercise:
+        Header: 
+            Home button
+            Exercise name and current tonic
+            Start button (or Next/Repeat buttons when active)
+        Stats bar:
+            Streak counter (consecutive correct answers)
+            Session score (correct/total)
+        Controls:
+            Tempo: number input 20-120 BPM (default 30)
+            Volume: slider control
+            Mode toggle: Harmonic / Melodic
+        Playback state indicator: "Press Start", "Listening...", or "Your turn!"
+        Placeholders: four slots showing identified chords (e.g., _ _ _ _)
+            Active placeholder (awaiting answer) has green pulsing border
+            Currently playing chord has gold highlight
+        Chord buttons:
             Major Scale: I ii iii IV V vi
             Minor Scale: i III iv V VI VII
+            Disabled during playback
+    
+    Playback Modes:
+        Harmonic: all three chord notes played simultaneously
+        Melodic: chord played as 4-note arpeggio sequence
+            Always starts with root note
+            Third and fifth follow in random order
+            Fourth note repeats one chord tone
+            All three chord tones (root, third, fifth) appear in each sequence
+    
     Behaviour:
-        When the exercise screen is opened, the app randomly chooses the tonic
-        When the user presses "Start", the exercise begins
-            The start button is replaced with two buttons:
-                Next try
-                Repeat
-            First, the cadence corresponding to the exercise scale is played harmonically, in the chosen tempo
-            Then, after a pause of 4 beats, a random chord progression of four chords is played, in the chosen tempo
-            Then the user tries to identify chords of the progression by pressing the chord buttons
-            If the user presses correct chord button, then the corresponding placeholder is filled with chord sign (e.g. III or vi) and the user is allowed to continue identifying the next chord
-            If the users presses incorrect chord button, then the corresponding placeholder briefly (0.5 sec) flashed red and the user has to try again on the current chord of the progression
-            When all chords have been successfully identified, the app automatically starts the next exercise after a 1-second delay
-            Any time the user presses Repeat button, the sound stops and the cadence and the chord progression are played again
-            Any time the user presses next, current exercise is stopped, a new tonic is chosen, the cadence is played and the exercise starts over (the Start button does not return though) 
+        When opened, app randomly chooses a tonic
+        Preferences (tempo, mode, volume) persist in localStorage
+        When "Start" is pressed:
+            Start button replaced with Next/Repeat
+            Cadence plays harmonically at fixed 90 BPM
+            After 1.5s pause, chord progression plays at chosen tempo
+            Placeholders highlight as each chord plays
+            User identifies chords by pressing chord buttons
+            Correct: placeholder fills, move to next chord
+            Incorrect: placeholder flashes red with shake animation, streak resets
+            All correct: auto-starts next exercise after 1 second
+        Repeat: replays cadence and progression
+        Next: new tonic, new progression, restart exercise 
     
 
 Future functionality:
-The app will play chord sequences and ask the user to identify the chords and press the corresponding buttons
-The app will also be wrapped in an iOS app
+    iOS app wrapper via Capacitor
+    Additional exercise types
+    Progressive difficulty levels
+    Achievement/badge system
