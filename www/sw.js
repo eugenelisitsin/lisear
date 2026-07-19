@@ -1,8 +1,10 @@
-const CACHE_NAME = 'lisear-v1';
+const CACHE_NAME = 'lisear-v2';
 const urlsToCache = [
-    '/',
-    '/index.html',
-    '/manifest.json'
+    './',
+    './index.html',
+    './manifest.json',
+    './app.js',
+    './styles.css'
 ];
 
 self.addEventListener('install', event => {

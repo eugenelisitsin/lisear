@@ -20,5 +20,5 @@ jobs:
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
           source: "www/*"
-          target: "/var/www/lisear"
+          target: "/var/www/apps/lisear"
           strip_components: 1
