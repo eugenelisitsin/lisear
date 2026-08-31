@@ -28,15 +28,26 @@ Global Settings
     Default tempo: 30 BPM (configurable 20-120)
     Volume: adjustable via slider
     
-Audio Synthesis
-    Enhanced Web Audio synthesis with:
+Audio
+    Sampled piano (www/samples/), played through Web Audio:
+        12 MP3 samples a minor third apart, C2 to A4
+        Each note plays the nearest sample, pitch-shifted by at most 1.5 semitones
+        Samples are loaded and decoded once, on the first user gesture;
+            the exercise screen shows "Loading piano samples..." until they are ready
+        All generated notes stay inside the sampled range:
+            chord voicings 36-57 (C3-A4), melody notes 45-57 (A3-A4)
         Staggered note attacks (15-25ms offset) for chord clarity
         Stereo panning based on pitch (low=left, high=right)
-        Attack noise burst for transient definition
-        Per-note detuning (±5 cents) and inharmonicity
         Velocity scaling by pitch (bass louder, treble softer)
-        Improved reverb with stereo early reflections
+        Gain envelope damps the sample tail when a note ends
+        Reverb with stereo early reflections
         Compressor to prevent clipping
+        Peak output around -7 dBFS at the default volume
+
+Offline / caching
+    Service worker caches the app shell and all samples
+    Samples are served cache-first; HTML/JS/CSS are network-first so a deploy
+        shows up without waiting for a cache-name bump
 
 Home Screen
     List of exercises, each exercise is a button

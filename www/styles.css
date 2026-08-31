@@ -59,6 +59,18 @@ button.disabled {
     transform: none;
 }
 
+/* Loading indicator */
+.loading-indicator {
+    font-style: italic;
+    opacity: 0.8;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+}
+
 /* Home screen styles */
 .exercise-buttons {
     display: flex;

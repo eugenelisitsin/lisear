@@ -38,6 +38,17 @@ class LisearApp {
         this.dryGain = null;
         this.compressor = null;
 
+        // Piano samples
+        this.sampleBuffers = {};
+        this.samplesLoaded = false;
+        this.samplesPromise = null;
+
+        // Pitch range covered by the samples (C2..A4)
+        this.lowestSample = 24;
+        this.highestSample = 57;
+        this.lowestChordNote = 36;
+        this.lowestMelodyNote = 45;
+
         this.loadPreferences();
         this.init();
     }
@@ -76,11 +87,9 @@ class LisearApp {
     }
 
     init() {
+        // Warm up audio on the first user gesture so samples are ready on demand
         document.addEventListener('click', () => {
-            if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                this.setupAudioGraph();
-            }
+            this.ensureAudio().catch(e => console.error(e));
         }, { once: true });
 
         this.showHomeScreen();
@@ -193,6 +202,67 @@ class LisearApp {
         this.savePreferences();
     }
 
+    // Create the audio context (needs a user gesture) and load the piano samples.
+    // Safe to call from any handler: the load only happens once.
+    ensureAudio() {
+        if (!this.audioContext) {
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            this.setupAudioGraph();
+        }
+        if (this.audioContext.state === 'suspended') {
+            this.audioContext.resume().catch(() => {});
+        }
+        return this.loadPianoSamples();
+    }
+
+    loadPianoSamples() {
+        if (this.samplesPromise) return this.samplesPromise;
+
+        const sampleNotes = ['C2', 'Ds2', 'Fs2', 'A2', 'C3', 'Ds3', 'Fs3', 'A3', 'C4', 'Ds4', 'Fs4', 'A4'];
+
+        this.samplesPromise = Promise.all(sampleNotes.map(async (note) => {
+            const response = await fetch(`samples/${note}.mp3`);
+            if (!response.ok) throw new Error(`${note}.mp3: HTTP ${response.status}`);
+            const arrayBuffer = await response.arrayBuffer();
+            this.sampleBuffers[note] = await this.audioContext.decodeAudioData(arrayBuffer);
+        })).then(() => {
+            this.samplesLoaded = true;
+            console.log('Piano samples loaded');
+        }).catch(e => {
+            // Allow a later attempt to retry
+            this.samplesPromise = null;
+            console.error('Failed to load piano samples:', e);
+            throw e;
+        });
+
+        return this.samplesPromise;
+    }
+
+    getSampleForSemitone(semitone) {
+        // Sampled notes in minor thirds (every 3 semitones)
+        // C2=24, Ds2=27, Fs2=30, A2=33, C3=36, Ds3=39, Fs3=42, A3=45, C4=48, Ds4=51, Fs4=54, A4=57
+        const sampledSemitones = [24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57];
+        const sampleNames = ['C2', 'Ds2', 'Fs2', 'A2', 'C3', 'Ds3', 'Fs3', 'A3', 'C4', 'Ds4', 'Fs4', 'A4'];
+
+        // Find nearest sample
+        let nearestIndex = 0;
+        let minDistance = Math.abs(sampledSemitones[0] - semitone);
+
+        for (let i = 1; i < sampledSemitones.length; i++) {
+            const distance = Math.abs(sampledSemitones[i] - semitone);
+            if (distance < minDistance) {
+                minDistance = distance;
+                nearestIndex = i;
+            }
+        }
+
+        const detuneCents = (semitone - sampledSemitones[nearestIndex]) * 100;
+        return {
+            sampleKey: sampleNames[nearestIndex],
+            detuneCents: detuneCents
+        };
+    }
+
     // ========================
     // UI Screens
     // ========================
@@ -210,7 +280,29 @@ class LisearApp {
         `;
     }
 
-    startExercise(type) {
+    async startExercise(type) {
+        const ready = this.ensureAudio();
+
+        if (!this.samplesLoaded) {
+            const container = document.querySelector('.container');
+            container.innerHTML = `
+                <h1>Lisear</h1>
+                <p class="loading-indicator">Loading piano samples...</p>
+            `;
+            try {
+                await ready;
+            } catch (e) {
+                container.innerHTML = `
+                    <h1>Lisear</h1>
+                    <p>Could not load the piano samples.</p>
+                    <div class="exercise-buttons">
+                        <button onclick="app.startExercise('${type}')">Try again</button>
+                    </div>
+                `;
+                return;
+            }
+        }
+
         this.currentExercise = type;
         this.currentTonic = this.getRandomTonic();
         this.resetExerciseState();
@@ -470,7 +562,7 @@ class LisearApp {
         let bestDistance = Infinity;
 
         for (const inv of inversions) {
-            if (inv.some(n => n < 40 || n > 64)) continue;
+            if (inv.some(n => n < this.lowestChordNote || n > this.highestSample)) continue;
 
             const sorted = [...inv].sort((a, b) => a - b);
             const prevSorted = [...prevVoicing].sort((a, b) => a - b);
@@ -482,7 +574,19 @@ class LisearApp {
             }
         }
 
-        return bestInversion.sort((a, b) => a - b);
+        return this.fitVoicingToRange(bestInversion);
+    }
+
+    // Shift a voicing by octaves until it sits inside the sampled range
+    fitVoicingToRange(semitones) {
+        let voicing = [...semitones].sort((a, b) => a - b);
+        for (let i = 0; i < 4 && voicing[voicing.length - 1] > this.highestSample; i++) {
+            voicing = voicing.map(n => n - 12);
+        }
+        for (let i = 0; i < 4 && voicing[0] < this.lowestChordNote; i++) {
+            voicing = voicing.map(n => n + 12);
+        }
+        return voicing;
     }
 
     voiceLeadProgression(chordSymbols) {
@@ -492,7 +596,7 @@ class LisearApp {
             const rawSemitones = this.getChordSemitones(chordSymbols[i]);
 
             if (i === 0) {
-                voiced.push(rawSemitones.sort((a, b) => a - b));
+                voiced.push(this.fitVoicingToRange(rawSemitones));
             } else {
                 voiced.push(this.getClosestVoicing(voiced[i - 1], rawSemitones));
             }
@@ -511,8 +615,8 @@ class LisearApp {
 
     // Calculate stereo pan based on pitch (-1 to 1)
     getPanForPitch(semitone) {
-        // Map semitone 40-64 to pan -0.6 to 0.6
-        const normalized = (semitone - 40) / (64 - 40);
+        // Map the playable range to pan -0.6 to 0.6
+        const normalized = (semitone - this.lowestChordNote) / (this.highestSample - this.lowestChordNote);
         return (normalized - 0.5) * 1.2; // -0.6 to 0.6
     }
 
@@ -523,123 +627,55 @@ class LisearApp {
         return baseVelocity * Math.max(0.7, Math.min(1.2, pitchFactor));
     }
 
-    // Generate attack noise burst
-    playAttackNoise(startTime, duration, velocity, panValue) {
-        if (!this.audioContext) return;
+    // Play a single note using piano sample
+    playNote(freq, startTime, duration, velocity = 1.2, panValue = 0) {
+        if (!this.audioContext || !this.samplesLoaded) return;
 
         const ctx = this.audioContext;
         const output = this.getOutputNode();
 
-        // Create noise buffer
-        const bufferSize = ctx.sampleRate * 0.03; // 30ms of noise
-        const noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-        const noiseData = noiseBuffer.getChannelData(0);
+        // Convert frequency to semitone (middle C = 48 = 261.63 Hz)
+        const semitone = Math.round(12 * Math.log2(freq / 261.63) + 48);
 
-        for (let i = 0; i < bufferSize; i++) {
-            noiseData[i] = (Math.random() * 2 - 1) * 0.5;
-        }
+        // Get nearest sample and required pitch shift
+        const { sampleKey, detuneCents } = this.getSampleForSemitone(semitone);
+        const buffer = this.sampleBuffers[sampleKey];
 
-        const noise = ctx.createBufferSource();
-        noise.buffer = noiseBuffer;
+        if (!buffer) return;
 
-        // Bandpass filter for "thump" quality
-        const filter = ctx.createBiquadFilter();
-        filter.type = 'bandpass';
-        filter.frequency.value = 800;
-        filter.Q.value = 1.5;
+        // Create buffer source
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.detune.value = detuneCents;
 
-        const noiseGain = ctx.createGain();
-        noiseGain.gain.setValueAtTime(velocity * 0.15, startTime);
-        noiseGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.025);
-
-        const panner = ctx.createStereoPanner();
-        panner.pan.value = panValue;
-
-        noise.connect(filter);
-        filter.connect(noiseGain);
-        noiseGain.connect(panner);
-        panner.connect(output.dry);
-
-        noise.start(startTime);
-        noise.stop(startTime + 0.03);
-
-        this.scheduledNodes.push(noise);
-    }
-
-    // Play a single note with enhanced timbre
-    playNote(freq, startTime, duration, velocity = 0.12, panValue = 0) {
-        if (!this.audioContext) return;
-
-        const ctx = this.audioContext;
-        const output = this.getOutputNode();
-
-        // Per-note random detuning for richness (±5 cents)
-        const detuneBase = (Math.random() - 0.5) * 10;
-
-        // Harmonics with slight inharmonicity (piano-like)
-        const harmonics = [
-            { ratio: 1, gain: 1.0, detune: 0 },
-            { ratio: 2, gain: 0.45, detune: 0.5 },      // Slightly sharp
-            { ratio: 3, gain: 0.2, detune: 1.2 },       // More sharp (inharmonicity)
-            { ratio: 4, gain: 0.1, detune: 2.0 },       // Even more sharp
-            { ratio: 5, gain: 0.05, detune: 3.0 },
-        ];
-
-        // Note gain envelope
+        // Note gain envelope: the sample carries its own attack and decay, so all
+        // this does is damp the tail when the note ends (like releasing the key).
         const noteGain = ctx.createGain();
+        const release = Math.min(0.3, duration * 0.4);
+
+        noteGain.gain.setValueAtTime(velocity, startTime);
+        noteGain.gain.setValueAtTime(velocity, startTime + duration - release);
+        noteGain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
 
         // Stereo panner
         const panner = ctx.createStereoPanner();
         panner.pan.value = panValue;
 
+        // Connect: source -> noteGain -> panner -> dry + wet
+        source.connect(noteGain);
         noteGain.connect(panner);
         panner.connect(output.dry);
         panner.connect(output.wet);
 
-        // ADSR envelope with two-stage release
-        const attack = 0.008 + Math.random() * 0.004; // 8-12ms attack variation
-        const decay = 0.12;
-        const sustainLevel = 0.35;
-        const release = 0.4;
+        source.start(startTime);
+        source.stop(startTime + duration + 0.05);
 
-        noteGain.gain.setValueAtTime(0, startTime);
-        noteGain.gain.linearRampToValueAtTime(velocity, startTime + attack);
-        noteGain.gain.exponentialRampToValueAtTime(velocity * sustainLevel, startTime + attack + decay);
-        noteGain.gain.setValueAtTime(velocity * sustainLevel, startTime + duration - release);
-        noteGain.gain.exponentialRampToValueAtTime(velocity * 0.1, startTime + duration - release * 0.3);
-        noteGain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-        harmonics.forEach((h, index) => {
-            const osc = ctx.createOscillator();
-            const hGain = ctx.createGain();
-
-            // Apply inharmonicity and per-oscillator detuning
-            const totalDetune = detuneBase + h.detune + (Math.random() - 0.5) * 2;
-            osc.frequency.value = freq * h.ratio;
-            osc.detune.value = totalDetune;
-
-            // Use sine for fundamental, triangle for upper harmonics (softer)
-            osc.type = index === 0 ? 'sine' : 'sine';
-
-            // Slight gain variation per harmonic
-            hGain.gain.value = h.gain * (0.9 + Math.random() * 0.2);
-
-            osc.connect(hGain);
-            hGain.connect(noteGain);
-
-            osc.start(startTime);
-            osc.stop(startTime + duration + 0.1);
-
-            this.scheduledNodes.push(osc);
-        });
-
-        // Add attack noise
-        this.playAttackNoise(startTime, duration, velocity, panValue);
+        this.scheduledNodes.push(source);
     }
 
     // Play a chord with staggered attacks and spatial positioning
     playChordFromSemitones(semitones, startTime, duration) {
-        const baseVelocity = 0.1 + Math.random() * 0.02;
+        const baseVelocity = 1.05 + Math.random() * 0.15;
 
         // Sort by pitch for consistent staggering (low to high)
         const sortedSemitones = [...semitones].sort((a, b) => a - b);
@@ -660,10 +696,11 @@ class LisearApp {
         });
     }
 
-    playChord(chordSymbol) {
-        if (!this.audioContext) {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            this.setupAudioGraph();
+    async playChord(chordSymbol) {
+        try {
+            await this.ensureAudio();
+        } catch (e) {
+            return; // already logged by loadPianoSamples
         }
 
         const semitones = this.getChordSemitones(chordSymbol);
@@ -683,23 +720,31 @@ class LisearApp {
     // Melody Generation
     // ========================
 
-    generateMelody(voicedProgression) {
+    generateMelody(voicedProgression, chordSymbols = []) {
         const melody = [];
         let lastNote = null;
 
-        for (const chordSemitones of voicedProgression) {
-            // Get the 3 unique chord tones (root, third, fifth)
-            const [root, third, fifth] = chordSemitones;
+        voicedProgression.forEach((chordSemitones, chordIndex) => {
+            // A voicing is sorted by pitch, so its lowest note is not necessarily
+            // the root: find the root by pitch class, the other two follow.
+            const symbol = chordSymbols[chordIndex];
+            const rootPitchClass = symbol
+                ? ((this.getChordSemitones(symbol)[0] % 12) + 12) % 12
+                : chordSemitones[0] % 12;
+            const rootIdx = Math.max(0, chordSemitones.findIndex(n => ((n % 12) + 12) % 12 === rootPitchClass));
+            const root = chordSemitones[rootIdx];
+            const [third, fifth] = chordSemitones.filter((_, i) => i !== rootIdx);
 
             // For each chord tone, find the best octave (closest to lastNote or center)
             const pickBestOctave = (baseSemitone) => {
                 const options = [baseSemitone - 12, baseSemitone, baseSemitone + 12]
-                    .filter(n => n >= 48 && n <= 72);
+                    .filter(n => n >= this.lowestMelodyNote && n <= this.highestSample);
                 if (options.length === 0) return baseSemitone;
 
                 if (lastNote === null) {
-                    // Pick closest to center (60 = middle C)
-                    return options.sort((a, b) => Math.abs(a - 60) - Math.abs(b - 60))[0];
+                    // Pick closest to the middle of the melodic range
+                    const center = (this.lowestMelodyNote + this.highestSample) / 2;
+                    return options.sort((a, b) => Math.abs(a - center) - Math.abs(b - center))[0];
                 }
                 // Pick closest to last note
                 return options.sort((a, b) => Math.abs(a - lastNote) - Math.abs(b - lastNote))[0];
@@ -728,7 +773,7 @@ class LisearApp {
             lastNote = fourthNote;
 
             melody.push(chordNotes);
-        }
+        });
 
         return melody;
     }
@@ -737,10 +782,12 @@ class LisearApp {
     // Playback with Visual Sync
     // ========================
 
-    startExerciseFlow() {
-        if (!this.audioContext) {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            this.setupAudioGraph();
+    async startExerciseFlow() {
+        try {
+            await this.ensureAudio();
+        } catch (e) {
+            this.updatePlaybackState('idle');
+            return; // already logged by loadPianoSamples
         }
 
         this.exerciseActive = true;
@@ -794,7 +841,7 @@ class LisearApp {
                 setTimeout(() => this.highlightPlaceholder(index), highlightDelay);
             });
         } else {
-            const melody = this.generateMelody(this.voicedProgression);
+            const melody = this.generateMelody(this.voicedProgression, this.currentProgression);
             const noteDuration = beat / this.melodyDensity;
 
             melody.forEach((chordNotes, chordIndex) => {
@@ -808,7 +855,7 @@ class LisearApp {
                     const freq = this.semitoneToFreq(semitone);
                     const time = chordStartTime + noteIndex * noteDuration;
                     const panValue = this.getPanForPitch(semitone);
-                    this.playNote(freq, time, noteDuration * 0.85, 0.15, panValue);
+                    this.playNote(freq, time, noteDuration * 0.85, 1.5, panValue);
                 });
             });
         }
