@@ -1,108 +1,38 @@
-This is a Capacitor-based PWA (Progressive Web App) project called "Lisear" that's set up for iOS deployment. 
+# Working on Lisear
 
-The master files of the PWA itself are in www/ directory. Ignore everything else.
+Ear-training PWA (recognise the chords of a progression), plain static files in `www/` — no build step for
+development. Live at https://apps.lisitsin.com/lisear/. Everything outside `www/`, `tools/`, `tests/`, `docs/` and
+`.github/` (Capacitor, `ios/`, npm files) is for a future iOS wrapper: ignore it.
+What the app does: `docs/REQUIREMENTS.md`. The full process is in `docs/WORKFLOW.md`; these are the binding rules for Claude.
 
-The app helps users train their ear to recognize chords in a melody.
+## How work flows
+- Board: https://github.com/users/eugenelisitsin/projects/2 — Status: Ideas → Refining → Ready → In progress → In review → Done.
+- **Ideas:** never touch. **Refining:** post ONE comment of numbered, business-level questions, each with a suggested
+  answer; label `needs-decision`. When answered: rewrite the issue body as the spec (what the learner can do · done
+  checklist · not included · decisions · size), remove the label, move the card to Ready, comment "Moved to Ready".
+- **Ready:** work top of the column first. Move the card to In progress, then to In review when the PR is up.
+- "Work on the board" = refine everything in Refining, then build everything in Ready.
+- Don't ask for confirmation on Ready items; ask on the issue only if something is genuinely unclear (card back to Refining).
 
-Deployment
-    GitHub repo: https://github.com/eugenelisitsin/lisear
-    Live at: https://apps.lisitsin.com/lisear/
-    Auto-deploys on push to main (changes to www/ folder)
+## Issues vs pull requests
+- Issue text and comments are **business-level only** (what learners hear, see and do). Short status comments:
+  "Ready to try: <preview link> — …".
+- All technical detail goes in the **pull request** (template: what changes for the learner / technical notes / checks).
+- Purely technical work: label `tech`.
 
-Basic Definitions 
-    An interval is the distance between two notes.
-    An octave is the interval between two notes with the same name (e.g., C to the next C)
-    Most common intervals are whole steps and half steps. A half step is the smallest interval, and a whole step is two half steps.
-    There is 12 half steps in an octave
-    A scale is a set of musical notes ordered by pitch, typically within the span of an octave. Each note in a scale is assigned a degree, first note is assigned first degree, it is also called the root or the tonic.
-    A major scale follows the interval pattern: whole, whole, half, whole, whole, whole, half. 
-    A natural minor scale follows the interval pattern: whole, half, whole, whole, half, whole, whole
-    Major chord is three notes following the interval pattern: four half steps, three half steps. Major chord starting with a note with is denoted with the note's Roman numeral in capital letter, e.g.: I, V, VI. 
-    Minor chord is three notes following the interval pattern: three half steps, four half steps. Minor chord starting with a note with is denoted with the note's Roman numeral in capital letter, e.g.: i, v, vi.
-    Cadence is a sequence of chords: I IV V I for major scale, i iv V i for natural minor scale
-    Harmonic chord playing is when all three notes in chord are played simultaneously
+## Pull requests
+- One PR per issue, **branched from the current `main`**, never stacked on another PR. Small related issues refined
+  together (size S, same area) may share one PR: one commit per issue, `Closes #A, closes #B`.
+- Never push to `main` directly; the owner merges (squash). Merging deploys automatically.
+- **At the start and end of every session:** rebase any open PR that is behind `main` or conflicting; keep both sides
+  of any `docs/decisions/` clash (renumber if two decisions got the same number).
+- Before opening a PR: `node --test tests/`, `sh tools/build.sh /tmp/lisear-dist`, and try the app in a browser via
+  `python3 tools/serve.py` (http://localhost:8812/; desktop, and phone width when the layout changes). Stop the
+  server and any headless browser afterwards.
+- Changed behaviour updates `docs/REQUIREMENTS.md` in the same PR.
+- A design decision gets a new file in `docs/decisions/` (next number). Every bug fix should add a regression test in `tests/`.
+- Sound changes: the owner judges by ear in the preview — say in the PR what to listen for.
 
-App Functionality
-
-Global Settings
-    Default tempo: 30 BPM (configurable 20-120)
-    Volume: adjustable via slider
-    
-Audio
-    Sampled piano (www/samples/), played through Web Audio:
-        12 MP3 samples a minor third apart, C2 to A4
-        Each note plays the nearest sample, pitch-shifted by at most 1.5 semitones
-        Samples are loaded and decoded once, on the first user gesture;
-            the exercise screen shows "Loading piano samples..." until they are ready
-        All generated notes stay inside the sampled range:
-            chord voicings 36-57 (C3-A4), melody notes 45-57 (A3-A4)
-        Staggered note attacks (15-25ms offset) for chord clarity
-        Stereo panning based on pitch (low=left, high=right)
-        Velocity scaling by pitch (bass louder, treble softer)
-        Gain envelope damps the sample tail when a note ends
-        Reverb with stereo early reflections
-        Compressor to prevent clipping
-        Peak output around -7 dBFS at the default volume
-
-Offline / caching
-    Service worker caches the app shell and all samples
-    Samples are served cache-first; HTML/JS/CSS are network-first so a deploy
-        shows up without waiting for a cache-name bump
-
-Home Screen
-    List of exercises, each exercise is a button
-    For now there will be 2 exercises named "Major Scale" and "Minor Scale"
-    Pressing on the button opens the exercise screen
-
-
-Exercise Screen
-    Layout:
-        Header: 
-            Home button
-            Exercise name and current tonic
-            Start button (or Next/Repeat buttons when active)
-        Stats bar:
-            Streak counter (consecutive correct answers)
-            Session score (correct/total)
-        Controls:
-            Tempo: number input 20-120 BPM (default 30)
-            Volume: slider control
-            Mode toggle: Harmonic / Melodic
-        Playback state indicator: "Press Start", "Listening...", or "Your turn!"
-        Placeholders: four slots showing identified chords (e.g., _ _ _ _)
-            Active placeholder (awaiting answer) has green pulsing border
-            Currently playing chord has gold highlight
-        Chord buttons:
-            Major Scale: I ii iii IV V vi
-            Minor Scale: i III iv V VI VII
-            Disabled during playback
-    
-    Playback Modes:
-        Harmonic: all three chord notes played simultaneously
-        Melodic: chord played as 4-note arpeggio sequence
-            Always starts with root note
-            Third and fifth follow in random order
-            Fourth note repeats one chord tone
-            All three chord tones (root, third, fifth) appear in each sequence
-    
-    Behaviour:
-        When opened, app randomly chooses a tonic
-        Preferences (tempo, mode, volume) persist in localStorage
-        When "Start" is pressed:
-            Start button replaced with Next/Repeat
-            Cadence plays harmonically at fixed 90 BPM
-            After 1.5s pause, chord progression plays at chosen tempo
-            Placeholders highlight as each chord plays
-            User identifies chords by pressing chord buttons
-            Correct: placeholder fills, move to next chord
-            Incorrect: placeholder flashes red with shake animation, streak resets
-            All correct: auto-starts next exercise after 1 second
-        Repeat: replays cadence and progression
-        Next: new tonic, new progression, restart exercise 
-    
-
-Future functionality:
-    iOS app wrapper via Capacitor
-    Additional exercise types
-    Progressive difficulty levels
-    Achievement/badge system
+## Changing the process
+When the owner changes how we work, update **`docs/WORKFLOW.md` and this file in the same PR**, and update Claude's
+memory for this project, so the rules never drift apart.

@@ -1,24 +1,60 @@
-name: Deploy to VPS
-
+name: Deploy
+# Merging a pull request into main publishes the app to https://apps.lisitsin.com/lisear/
 on:
   push:
     branches: [main]
-    paths:
-      - 'www/**'
-
+  workflow_dispatch:
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
 jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
   deploy:
+    needs: checks
     runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://apps.lisitsin.com/lisear/
     steps:
       - uses: actions/checkout@v4
-
-      - name: Deploy to VPS
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          port: ${{ secrets.VPS_PORT }}
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "www/*"
-          target: "/var/www/apps/lisear"
-          strip_components: 1
+      - name: Build
+        id: build
+        run: echo "assets=$(sh tools/build.sh dist)" >> "$GITHUB_OUTPUT"
+      - name: SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      # the deploy key may only rsync into /var/www/apps; old asset folders are pruned on the server
+      # (/etc/cron.daily/lisear-prune). The page and the service worker go last, once their assets are there.
+      - name: Upload
+        run: |
+          rsync -rlz --chmod=Da+rx,Fa+r --exclude index.html --exclude sw.js -e "ssh -i ~/.ssh/deploy -p 58291" dist/ deploy@78.17.65.107:lisear/
+          rsync -rlz --chmod=Da+rx,Fa+r -e "ssh -i ~/.ssh/deploy -p 58291" dist/index.html dist/sw.js deploy@78.17.65.107:lisear/
+      - name: Live page serves the new build
+        run: curl -fsS https://apps.lisitsin.com/lisear/ | grep -q "${{ steps.build.outputs.assets }}"
+  # Tell the merged pull request whether its change went live (or why not)
+  report:
+    needs: [checks, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment on the merged pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULT: ${{ needs.deploy.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          pr=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '.[0].number // empty')
+          [ -n "$pr" ] || { echo "no pull request for $GITHUB_SHA"; exit 0; }
+          if [ "$RESULT" = "success" ]; then
+            body="✅ **Live** at https://apps.lisitsin.com/lisear/ — deployed $(date -u '+%Y-%m-%d %H:%M') UTC (commit ${GITHUB_SHA:0:7}). Reopen the app to get it."
+          else
+            body="❌ **Deploy failed** — the live app was not updated. Details: $RUN_URL"
+          fi
+          gh pr comment "$pr" --repo "$GITHUB_REPOSITORY" --body "$body"

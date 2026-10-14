@@ -1,0 +1,20 @@
+name: Technical task
+description: Engineering work with no direct change for learners (tests, refactoring, tooling). Hidden from the Product view.
+labels: [tech]
+projects: ["eugenelisitsin/2"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: Task
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why now
+  - type: input
+    id: parent
+    attributes:
+      label: Business issue it serves (if any)
+      placeholder: "#12"

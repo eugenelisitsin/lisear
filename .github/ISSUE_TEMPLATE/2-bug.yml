@@ -1,0 +1,26 @@
+name: Something is wrong
+description: Broken behaviour, wrong chord or sound, display problem
+labels: [bug]
+projects: ["eugenelisitsin/2"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened?
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      multiple: true
+      options: [Desktop, Phone, Tablet, Installed app (home screen)]
+  - type: textarea
+    id: shot
+    attributes:
+      label: Screenshot
+      description: Paste or drag an image here.
