@@ -12,10 +12,12 @@ const SHELL = [
     './',
     './index.html',
     './manifest.json',
+    ASSETS + 'music.js',
     ASSETS + 'app.js',
     ASSETS + 'styles.css'
 ];
-const SAMPLES = ['C2', 'Ds2', 'Fs2', 'A2', 'C3', 'Ds3', 'Fs3', 'A3', 'C4', 'Ds4', 'Fs4', 'A4']
+// Same list as LisearMusic.SAMPLES in music.js (tests/music.test.js checks)
+const SAMPLES = ['C2', 'Ds2', 'Fs2', 'A2', 'C3', 'Ds3', 'Fs3', 'A3', 'C4', 'Ds4', 'Fs4', 'A4', 'C5', 'Ds5', 'Fs5', 'A5']
     .map(note => `./samples/${note}.mp3`);
 
 self.addEventListener('install', event => {

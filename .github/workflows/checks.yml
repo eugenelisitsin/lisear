@@ -14,6 +14,6 @@ jobs:
       - name: JavaScript syntax
         run: for f in www/*.js tools/*.js tests/*.js; do [ -e "$f" ] || continue; node --check "$f" || exit 1; done
       - name: Unit tests
-        run: if [ -d tests ]; then node --test tests/; else echo "no tests yet"; fi
+        run: if [ -d tests ]; then node --test tests/*.test.js; else echo "no tests yet"; fi
       - name: App builds
         run: sh tools/build.sh dist

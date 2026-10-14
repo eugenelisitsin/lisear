@@ -28,24 +28,31 @@ Global Settings
     
 Audio
     Sampled piano (www/samples/), played through Web Audio:
-        12 MP3 samples a minor third apart, C2 to A4
+        16 MP3 samples a minor third apart, C2 to A5
         Each note plays the nearest sample, pitch-shifted by at most 1.5 semitones
         Samples are loaded and decoded once, on the first user gesture;
             the exercise screen shows "Loading piano samples..." until they are ready
-        All generated notes stay inside the sampled range:
-            chord voicings 36-57 (C3-A4), melody notes 45-57 (A3-A4)
+        Harmonic chords (D6), depending on the Bass setting:
+            Root (default): the chord's root alone in the bass, 33-44 (A2-G#3), under a
+                close-position triad in 50-67 (D4-G5)
+            Inversions: the close-position triad alone in 36-57 (C3-A4), so the lowest
+                note may be the third or fifth
+            Triads are voice-led (each voice moves as little as possible), pulled towards
+                the middle of their range
+        Melody notes 45-57 (A3-A4)
         Staggered note attacks (15-25ms offset) for chord clarity
         Stereo panning based on pitch (low=left, high=right)
         Velocity scaling by pitch (bass louder, treble softer)
         Gain envelope damps the sample tail when a note ends
-        Reverb with stereo early reflections
+        Reverb: a short, dark convolution room about 12 dB below the dry sound
         Compressor to prevent clipping
-        Peak output around -7 dBFS at the default volume
+        Peak output around -3.5 dBFS at the default volume (offline render of a
+            progression), the same as before D6
 
 Offline / caching
-    Service worker caches the app shell and all samples
-    Samples are served cache-first; HTML/JS/CSS are network-first so a deploy
-        shows up without waiting for a cache-name bump
+    Service worker caches the app shell and all samples (D5)
+    Samples and content-hashed JS/CSS are served cache-first; pages are network-first,
+        so a deploy reaches learners the next time they open the app
 
 Home Screen
     List of exercises, each exercise is a button
@@ -66,6 +73,7 @@ Exercise Screen
             Tempo: number input 20-120 BPM (default 30)
             Volume: slider control
             Mode toggle: Harmonic / Melodic
+            Bass toggle: Root / Inversions (default Root)
         Playback state indicator: "Press Start", "Listening...", or "Your turn!"
         Placeholders: four slots showing identified chords (e.g., _ _ _ _)
             Active placeholder (awaiting answer) has green pulsing border
@@ -85,7 +93,7 @@ Exercise Screen
     
     Behaviour:
         When opened, app randomly chooses a tonic
-        Preferences (tempo, mode, volume) persist in localStorage
+        Preferences (tempo, mode, bass, volume) persist in localStorage
         When "Start" is pressed:
             Start button replaced with Next/Repeat
             Cadence plays harmonically at the chosen tempo
