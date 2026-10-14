@@ -1,0 +1,34 @@
+name: Feature or idea
+description: Something a learner should be able to do or hear
+labels: [feature]
+projects: ["eugenelisitsin/2"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe it from the learner's point of view. No need for technical detail — that is discussed in the pull request.
+  - type: textarea
+    id: what
+    attributes:
+      label: What should a learner be able to do?
+      placeholder: e.g. "After a wrong answer, hear my guess and the right chord one after the other."
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter?
+      placeholder: What is hard or impossible today.
+  - type: textarea
+    id: done
+    attributes:
+      label: How will we know it is done?
+      description: A few checks a learner could do.
+      placeholder: |
+        - [ ] I can …
+        - [ ] On a phone, …
+  - type: textarea
+    id: out
+    attributes:
+      label: Not included
+      placeholder: What this deliberately does not cover.

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How we work
+    url: https://github.com/eugenelisitsin/lisear/blob/main/docs/WORKFLOW.md
+    about: Issues describe what learners need; technical discussion happens in pull requests.

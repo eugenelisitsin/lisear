@@ -1,0 +1,49 @@
+name: Preview
+# Every open pull request is published at https://apps.lisitsin.com/lisear-previews/pr-<number>/
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+concurrency:
+  group: preview-${{ github.event.number }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+  pull-requests: write
+env:
+  URL: https://apps.lisitsin.com/lisear-previews/pr-${{ github.event.number }}/
+  DEST: deploy@78.17.65.107:lisear-previews/pr-${{ github.event.number }}/
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy && chmod 600 ~/.ssh/deploy
+          printf '%s\n' "${{ secrets.DEPLOY_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+      - name: Build and upload
+        if: github.event.action != 'closed'
+        run: |
+          sh tools/build.sh dist
+          rsync -rlz --delete --chmod=Da+rx,Fa+r -e "ssh -i ~/.ssh/deploy -p 58291" dist/ "$DEST"
+      - name: Remove preview
+        if: github.event.action == 'closed'
+        run: |
+          mkdir empty
+          rsync -rl --delete -e "ssh -i ~/.ssh/deploy -p 58291" empty/ "$DEST"
+      - name: Comment with the link
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          CLOSED: ${{ github.event.action == 'closed' }}
+        run: |
+          if [ "$CLOSED" = "true" ]; then body="🔍 Preview removed (pull request closed)."
+          else body="🔍 **Preview:** $URL
+          Updated for ${SHA:0:7}. Try it with headphones and on a phone."; fi
+          body="<!-- preview -->
+          $body"
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq '[.[] | select(.body | startswith("<!-- preview -->"))][0].id // empty')
+          if [ -n "$id" ]; then gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+          else gh pr comment "$PR" --body "$body"; fi
