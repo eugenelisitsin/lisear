@@ -204,6 +204,12 @@ button.disabled {
     margin: 10px 0;
 }
 
+.mode-label {
+    align-self: center;
+    font-size: 0.9em;
+    opacity: 0.8;
+}
+
 .mode-btn, .density-btn {
     min-width: 80px;
     padding: 6px 14px;

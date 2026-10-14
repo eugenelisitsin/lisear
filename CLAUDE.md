@@ -26,7 +26,7 @@ What the app does: `docs/REQUIREMENTS.md`. The full process is in `docs/WORKFLOW
 - Never push to `main` directly; the owner merges (squash). Merging deploys automatically.
 - **At the start and end of every session:** rebase any open PR that is behind `main` or conflicting; keep both sides
   of any `docs/decisions/` clash (renumber if two decisions got the same number).
-- Before opening a PR: `node --test tests/`, `sh tools/build.sh /tmp/lisear-dist`, and try the app in a browser via
+- Before opening a PR: `node --test tests/*.test.js`, `sh tools/build.sh /tmp/lisear-dist`, and try the app in a browser via
   `python3 tools/serve.py` (http://localhost:8812/; desktop, and phone width when the layout changes). Stop the
   server and any headless browser afterwards.
 - Changed behaviour updates `docs/REQUIREMENTS.md` in the same PR.

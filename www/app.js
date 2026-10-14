@@ -23,13 +23,14 @@ class LisearApp {
 
         // Mode state
         this.playMode = 'harmonic';
+        this.bassMode = 'root'; // 'root': root in the bass under the triad; 'inversions': triad alone (D6)
         this.melodyDensity = 4;
 
         // Voiced progressions
         this.voicedCadence = [];
         this.voicedProgression = [];
 
-        this.notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        this.notes = LisearMusic.NOTES;
 
         // Audio nodes
         this.reverbSetup = false;
@@ -42,12 +43,6 @@ class LisearApp {
         this.sampleBuffers = {};
         this.samplesLoaded = false;
         this.samplesPromise = null;
-
-        // Pitch range covered by the samples (C2..A4)
-        this.lowestSample = 24;
-        this.highestSample = 57;
-        this.lowestChordNote = 36;
-        this.lowestMelodyNote = 45;
 
         this.loadPreferences();
         this.init();
@@ -64,6 +59,7 @@ class LisearApp {
                 const prefs = JSON.parse(saved);
                 this.selectedTempo = prefs.tempo || 30;
                 this.playMode = prefs.playMode || 'harmonic';
+                this.bassMode = prefs.bassMode === 'inversions' ? 'inversions' : 'root';
                 this.melodyDensity = 4; // Fixed at 4 notes per chord
                 this.volume = prefs.volume !== undefined ? prefs.volume : 0.8;
                 this.beatDuration = 60 / this.selectedTempo;
@@ -78,6 +74,7 @@ class LisearApp {
             localStorage.setItem('lisear_preferences', JSON.stringify({
                 tempo: this.selectedTempo,
                 playMode: this.playMode,
+                bassMode: this.bassMode,
                 melodyDensity: this.melodyDensity,
                 volume: this.volume
             }));
@@ -121,70 +118,37 @@ class LisearApp {
 
         // Dry signal path
         this.dryGain = ctx.createGain();
-        this.dryGain.gain.value = 0.7;
+        this.dryGain.gain.value = 0.8;
         this.dryGain.connect(this.masterGain);
 
-        // Reverb bus with improved algorithm
+        // Reverb: a short, dark room as a convolution. (Discrete delay taps comb-filtered the
+        // chords and blurred their pitches, D6.)
         this.reverbGain = ctx.createGain();
-        this.reverbGain.gain.value = 0.35;
+        this.reverbGain.gain.value = 0.4;
+        const convolver = ctx.createConvolver();
+        convolver.buffer = this.createRoomImpulse(ctx, 1.4);
+        this.reverbGain.connect(convolver);
+        convolver.connect(this.masterGain);
+    }
 
-        // Early reflections
-        const earlyReflections = [
-            { time: 0.015, gain: 0.5, pan: -0.3 },
-            { time: 0.025, gain: 0.4, pan: 0.3 },
-            { time: 0.04, gain: 0.35, pan: -0.2 },
-            { time: 0.055, gain: 0.3, pan: 0.2 },
-            { time: 0.08, gain: 0.2, pan: 0 },
-        ];
-
-        // Late reverb tail
-        const lateTail = [
-            { time: 0.12, gain: 0.15 },
-            { time: 0.18, gain: 0.1 },
-            { time: 0.25, gain: 0.06 },
-            { time: 0.35, gain: 0.03 },
-        ];
-
-        // Early reflections with stereo
-        earlyReflections.forEach(({ time, gain: g, pan }) => {
-            const delay = ctx.createDelay();
-            delay.delayTime.value = time;
-
-            const gain = ctx.createGain();
-            gain.gain.value = g;
-
-            const panner = ctx.createStereoPanner();
-            panner.pan.value = pan;
-
-            // High-shelf filter to darken reflections slightly
-            const filter = ctx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.value = 8000;
-
-            this.reverbGain.connect(delay);
-            delay.connect(filter);
-            filter.connect(gain);
-            gain.connect(panner);
-            panner.connect(this.masterGain);
-        });
-
-        // Late reverb tail (mono, darker)
-        lateTail.forEach(({ time, gain: g }) => {
-            const delay = ctx.createDelay();
-            delay.delayTime.value = time;
-
-            const gain = ctx.createGain();
-            gain.gain.value = g;
-
-            const filter = ctx.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.value = 4000;
-
-            this.reverbGain.connect(delay);
-            delay.connect(filter);
-            filter.connect(gain);
-            gain.connect(this.masterGain);
-        });
+    // Stereo impulse response: decaying noise, darkening as it decays, after a short pre-delay
+    createRoomImpulse(ctx, seconds) {
+        const rate = ctx.sampleRate;
+        const length = Math.floor(rate * seconds);
+        const preDelay = Math.floor(rate * 0.012);
+        const impulse = ctx.createBuffer(2, length, rate);
+        for (let channel = 0; channel < 2; channel++) {
+            const data = impulse.getChannelData(channel);
+            let low = 0;
+            for (let i = preDelay; i < length; i++) {
+                const t = (i - preDelay) / rate;
+                // one-pole low-pass whose cutoff falls over time
+                const smoothing = Math.min(0.95, 0.35 + t * 0.6);
+                low = low * smoothing + (Math.random() * 2 - 1) * (1 - smoothing);
+                data[i] = low * Math.exp(-t * 4.5) * 3;
+            }
+        }
+        return impulse;
     }
 
     getOutputNode() {
@@ -218,7 +182,7 @@ class LisearApp {
     loadPianoSamples() {
         if (this.samplesPromise) return this.samplesPromise;
 
-        const sampleNotes = ['C2', 'Ds2', 'Fs2', 'A2', 'C3', 'Ds3', 'Fs3', 'A3', 'C4', 'Ds4', 'Fs4', 'A4'];
+        const sampleNotes = LisearMusic.SAMPLES.map(s => s.name);
 
         this.samplesPromise = Promise.all(sampleNotes.map(async (note) => {
             const response = await fetch(`samples/${note}.mp3`);
@@ -236,31 +200,6 @@ class LisearApp {
         });
 
         return this.samplesPromise;
-    }
-
-    getSampleForSemitone(semitone) {
-        // Sampled notes in minor thirds (every 3 semitones)
-        // C2=24, Ds2=27, Fs2=30, A2=33, C3=36, Ds3=39, Fs3=42, A3=45, C4=48, Ds4=51, Fs4=54, A4=57
-        const sampledSemitones = [24, 27, 30, 33, 36, 39, 42, 45, 48, 51, 54, 57];
-        const sampleNames = ['C2', 'Ds2', 'Fs2', 'A2', 'C3', 'Ds3', 'Fs3', 'A3', 'C4', 'Ds4', 'Fs4', 'A4'];
-
-        // Find nearest sample
-        let nearestIndex = 0;
-        let minDistance = Math.abs(sampledSemitones[0] - semitone);
-
-        for (let i = 1; i < sampledSemitones.length; i++) {
-            const distance = Math.abs(sampledSemitones[i] - semitone);
-            if (distance < minDistance) {
-                minDistance = distance;
-                nearestIndex = i;
-            }
-        }
-
-        const detuneCents = (semitone - sampledSemitones[nearestIndex]) * 100;
-        return {
-            sampleKey: sampleNames[nearestIndex],
-            detuneCents: detuneCents
-        };
     }
 
     // ========================
@@ -367,6 +306,14 @@ class LisearApp {
                         onclick="app.setPlayMode('melodic')" ${this.exerciseActive ? 'disabled' : ''}>Melodic</button>
             </div>
 
+            <div class="mode-control bass-control">
+                <span class="mode-label">Bass:</span>
+                <button class="mode-btn ${this.bassMode === 'root' ? 'active' : ''}"
+                        onclick="app.setBassMode('root')" ${this.exerciseActive ? 'disabled' : ''}>Root</button>
+                <button class="mode-btn ${this.bassMode === 'inversions' ? 'active' : ''}"
+                        onclick="app.setBassMode('inversions')" ${this.exerciseActive ? 'disabled' : ''}>Inversions</button>
+            </div>
+
 
             <div class="playback-state" id="playback-state">
                 ${this.getPlaybackStateText()}
@@ -424,6 +371,12 @@ class LisearApp {
         this.showExerciseScreen();
     }
 
+    setBassMode(mode) {
+        this.bassMode = mode;
+        this.savePreferences();
+        this.showExerciseScreen();
+    }
+
     setMelodyDensity(density) {
         this.melodyDensity = density;
         this.savePreferences();
@@ -450,9 +403,7 @@ class LisearApp {
     }
 
     getChordButtons() {
-        const chords = this.currentExercise === 'major'
-            ? ['I', 'ii', 'iii', 'IV', 'V', 'vi']
-            : ['i', 'III', 'iv', 'V', 'VI', 'VII'];
+        const chords = LisearMusic.SCALES[this.currentExercise].chords;
 
         return chords.map(chord =>
             `<button class="chord-button" onclick="app.handleChordGuess('${chord}')">${chord}</button>`
@@ -495,9 +446,7 @@ class LisearApp {
     }
 
     generateRandomProgression() {
-        const chords = this.currentExercise === 'major'
-            ? ['I', 'ii', 'iii', 'IV', 'V', 'vi']
-            : ['i', 'III', 'iv', 'V', 'VI', 'VII'];
+        const chords = LisearMusic.SCALES[this.currentExercise].chords;
 
         this.currentProgression = [];
         for (let i = 0; i < 4; i++) {
@@ -507,102 +456,15 @@ class LisearApp {
     }
 
     // ========================
-    // Voice Leading System
+    // Voicings (www/music.js)
     // ========================
 
-    getScaleDegree(chordSymbol) {
-        const romanNumerals = {
-            'I': 1, 'i': 1, 'II': 2, 'ii': 2, 'III': 3, 'iii': 3,
-            'IV': 4, 'iv': 4, 'V': 5, 'v': 5, 'VI': 6, 'vi': 6,
-            'VII': 7, 'vii': 7
-        };
-        return romanNumerals[chordSymbol] || 1;
-    }
-
-    isMinorChord(chordSymbol) {
-        return chordSymbol.toLowerCase() === chordSymbol;
-    }
-
     getChordSemitones(chordSymbol) {
-        const tonicIndex = this.notes.indexOf(this.currentTonic);
-        const degree = this.getScaleDegree(chordSymbol);
-        const isMinor = this.isMinorChord(chordSymbol);
-
-        const scaleIntervals = this.currentExercise === 'major'
-            ? [0, 2, 4, 5, 7, 9, 11]
-            : [0, 2, 3, 5, 7, 8, 10];
-
-        const rootSemitone = 48 + tonicIndex + scaleIntervals[degree - 1];
-
-        if (isMinor) {
-            return [rootSemitone, rootSemitone + 3, rootSemitone + 7];
-        } else {
-            return [rootSemitone, rootSemitone + 4, rootSemitone + 7];
-        }
+        return LisearMusic.chordSemitones(this.currentExercise, this.currentTonic, chordSymbol);
     }
 
-    getInversions(semitones) {
-        const [a, b, c] = semitones;
-        return [
-            [a, b, c],
-            [a - 12, b, c],
-            [a, b - 12, c],
-            [a, b, c - 12],
-            [a + 12, b, c],
-            [a, b + 12, c],
-            [a, b, c + 12],
-            [a - 12, b - 12, c],
-            [a, b, c + 12],
-        ];
-    }
-
-    getClosestVoicing(prevVoicing, newChordSemitones) {
-        const inversions = this.getInversions(newChordSemitones);
-        let bestInversion = inversions[0];
-        let bestDistance = Infinity;
-
-        for (const inv of inversions) {
-            if (inv.some(n => n < this.lowestChordNote || n > this.highestSample)) continue;
-
-            const sorted = [...inv].sort((a, b) => a - b);
-            const prevSorted = [...prevVoicing].sort((a, b) => a - b);
-            const distance = sorted.reduce((sum, note, i) => sum + Math.abs(note - prevSorted[i]), 0);
-
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                bestInversion = sorted;
-            }
-        }
-
-        return this.fitVoicingToRange(bestInversion);
-    }
-
-    // Shift a voicing by octaves until it sits inside the sampled range
-    fitVoicingToRange(semitones) {
-        let voicing = [...semitones].sort((a, b) => a - b);
-        for (let i = 0; i < 4 && voicing[voicing.length - 1] > this.highestSample; i++) {
-            voicing = voicing.map(n => n - 12);
-        }
-        for (let i = 0; i < 4 && voicing[0] < this.lowestChordNote; i++) {
-            voicing = voicing.map(n => n + 12);
-        }
-        return voicing;
-    }
-
-    voiceLeadProgression(chordSymbols) {
-        const voiced = [];
-
-        for (let i = 0; i < chordSymbols.length; i++) {
-            const rawSemitones = this.getChordSemitones(chordSymbols[i]);
-
-            if (i === 0) {
-                voiced.push(this.fitVoicingToRange(rawSemitones));
-            } else {
-                voiced.push(this.getClosestVoicing(voiced[i - 1], rawSemitones));
-            }
-        }
-
-        return voiced;
+    getHarmonicVoicings(chordSymbols) {
+        return LisearMusic.harmonicVoicings(this.currentExercise, this.currentTonic, chordSymbols, this.bassMode);
     }
 
     semitoneToFreq(semitone) {
@@ -615,9 +477,11 @@ class LisearApp {
 
     // Calculate stereo pan based on pitch (-1 to 1)
     getPanForPitch(semitone) {
-        // Map the playable range to pan -0.6 to 0.6
-        const normalized = (semitone - this.lowestChordNote) / (this.highestSample - this.lowestChordNote);
-        return (normalized - 0.5) * 1.2; // -0.6 to 0.6
+        // Map the range from the lowest bass note to the highest chord note to pan -0.6 to 0.6
+        const low = LisearMusic.RANGES.bass[0];
+        const high = LisearMusic.RANGES.upper[1];
+        const normalized = Math.max(0, Math.min(1, (semitone - low) / (high - low)));
+        return (normalized - 0.5) * 1.2;
     }
 
     // Get velocity scaling based on pitch (bass slightly louder)
@@ -638,7 +502,7 @@ class LisearApp {
         const semitone = Math.round(12 * Math.log2(freq / 261.63) + 48);
 
         // Get nearest sample and required pitch shift
-        const { sampleKey, detuneCents } = this.getSampleForSemitone(semitone);
+        const { sampleKey, detuneCents } = LisearMusic.sampleFor(semitone);
         const buffer = this.sampleBuffers[sampleKey];
 
         if (!buffer) return;
@@ -703,7 +567,7 @@ class LisearApp {
             return; // already logged by loadPianoSamples
         }
 
-        const semitones = this.getChordSemitones(chordSymbol);
+        const [semitones] = this.getHarmonicVoicings([chordSymbol]);
         const now = this.audioContext.currentTime;
         this.playChordFromSemitones(semitones, now, 0.8);
     }
@@ -736,14 +600,15 @@ class LisearApp {
             const [third, fifth] = chordSemitones.filter((_, i) => i !== rootIdx);
 
             // For each chord tone, find the best octave (closest to lastNote or center)
+            const [lowestMelodyNote, highestMelodyNote] = LisearMusic.RANGES.melody;
             const pickBestOctave = (baseSemitone) => {
                 const options = [baseSemitone - 12, baseSemitone, baseSemitone + 12]
-                    .filter(n => n >= this.lowestMelodyNote && n <= this.highestSample);
+                    .filter(n => n >= lowestMelodyNote && n <= highestMelodyNote);
                 if (options.length === 0) return baseSemitone;
 
                 if (lastNote === null) {
                     // Pick closest to the middle of the melodic range
-                    const center = (this.lowestMelodyNote + this.highestSample) / 2;
+                    const center = (lowestMelodyNote + highestMelodyNote) / 2;
                     return options.sort((a, b) => Math.abs(a - center) - Math.abs(b - center))[0];
                 }
                 // Pick closest to last note
@@ -803,15 +668,15 @@ class LisearApp {
         this.stopAllSound();
         this.updatePlaybackState('playing');
 
-        const cadenceSymbols = this.currentExercise === 'major'
-            ? ['I', 'IV', 'V', 'I']
-            : ['i', 'iv', 'V', 'i'];
+        const cadenceSymbols = LisearMusic.SCALES[this.currentExercise].cadence;
 
-        const allSymbols = [...cadenceSymbols, ...this.currentProgression];
-        const allVoiced = this.voiceLeadProgression(allSymbols);
-
+        // Cadence and progression are voice-led as one sequence. Melodic mode arpeggiates the
+        // triads in the register used before D6; its cadence still follows the bass setting.
+        const allVoiced = this.getHarmonicVoicings([...cadenceSymbols, ...this.currentProgression]);
         this.voicedCadence = allVoiced.slice(0, cadenceSymbols.length);
-        this.voicedProgression = allVoiced.slice(cadenceSymbols.length);
+        this.voicedProgression = this.playMode === 'harmonic'
+            ? allVoiced.slice(cadenceSymbols.length)
+            : LisearMusic.voiceLead(this.currentProgression.map(c => this.getChordSemitones(c)), LisearMusic.RANGES.inversions);
 
         const now = this.audioContext.currentTime + 0.1;
         const beat = this.beatDuration;
